@@ -118,6 +118,8 @@
   .bay-btn[data-bay="3"].active .n{color:var(--c3-light);}
   .bay-btn.closed{opacity:.4;pointer-events:none;}
   .bay-btn.closed .t{color:var(--red);}
+  .bay-btn.done{opacity:.55;pointer-events:none;border-color:var(--accent);background:rgba(67,201,138,.08);}
+  .bay-btn.done .l{color:var(--accent);}
 
   .submit-btn{
     margin-top:4px;width:100%;padding:16px;border-radius:12px;border:none;
@@ -301,6 +303,7 @@ async function loadDrivers(){
       input.placeholder = 'Motorista não encontrado — fale com o gestor';
     }
     refreshSubmitState();
+    loadAlreadyMarked();
   }
 }
 loadDrivers();
@@ -314,6 +317,7 @@ $('driverInput').addEventListener('input', (e) => {
     card.classList.add('show');
     $('cardPlate').textContent = match.plate || 'sem placa';
     $('cardType').textContent = match.type || '—';
+    loadAlreadyMarked();
   } else {
     card.classList.remove('show');
   }
@@ -328,6 +332,48 @@ function isWithinAvailabilityWindow(now = new Date()){
   const endMin = w.endH * 60 + w.endM;
   // janela cruza a meia-noite (start > end): aberta se depois do início OU antes do fim
   return nowMin >= startMin || nowMin < endMin;
+}
+
+// início do ciclo atual (o 22h mais recente que já passou)
+function getCycleStart(now = new Date()){
+  const start = new Date(now);
+  start.setHours(AVAILABILITY_WINDOW.startH, AVAILABILITY_WINDOW.startM, 0, 0);
+  if(now < start) start.setDate(start.getDate() - 1);
+  return start;
+}
+
+let alreadyMarked = new Set(); // carregamentos já registrados pelo motorista neste ciclo
+
+async function loadAlreadyMarked(){
+  if(!currentDriver) { alreadyMarked = new Set(); return; }
+  try{
+    const res = await fetch(`${SHEET_URL}?action=records&sheet=Disponibilidade`);
+    const records = await res.json();
+    const cycleStart = getCycleStart();
+    alreadyMarked = new Set(
+      records
+        .filter(r => r.driverName === currentDriver.name && new Date(r.timestamp) >= cycleStart)
+        .map(r => r.carregamento)
+    );
+  }catch(err){
+    alreadyMarked = new Set();
+  }
+  applyAlreadyMarked();
+}
+
+function applyAlreadyMarked(){
+  document.querySelectorAll('.bay-btn').forEach(btn => {
+    const bay = btn.dataset.bay;
+    const done = alreadyMarked.has(bay);
+    btn.classList.toggle('done', done);
+    const label = btn.querySelector('.l');
+    if(label) label.textContent = done ? 'Registrado ✓' : 'Carreg.';
+    if(done && currentBay === bay){
+      btn.classList.remove('active');
+      currentBay = null;
+    }
+  });
+  refreshSubmitState();
 }
 
 function refreshWindowStatus(){
@@ -355,7 +401,7 @@ setInterval(refreshWindowStatus, 30000);
 // ---- bay selection ----
 document.querySelectorAll('.bay-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if(btn.classList.contains('closed')) return;
+    if(btn.classList.contains('closed') || btn.classList.contains('done')) return;
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentBay = btn.dataset.bay;
@@ -364,7 +410,7 @@ document.querySelectorAll('.bay-btn').forEach(btn => {
 });
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && isWithinAvailabilityWindow();
+  const ok = currentDriver && currentBay && isWithinAvailabilityWindow() && !alreadyMarked.has(currentBay);
   $('submitBtn').disabled = !ok;
 }
 
@@ -388,14 +434,17 @@ $('submitBtn').addEventListener('click', async () => {
       body: JSON.stringify(record)
     });
     showToast('ok', `Disponibilidade registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
+    alreadyMarked.add(currentBay);
     // reset for next entry (keep driver filled if this is a personal locked link)
     if(!lockedDriverParam){
       $('driverInput').value = '';
       $('driverCard').classList.remove('show');
       currentDriver = null;
+      alreadyMarked = new Set();
     }
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     currentBay = null;
+    applyAlreadyMarked();
   }catch(err){
     showToast('bad', 'Não foi possível salvar. Verifique a internet e tente novamente.');
   }
