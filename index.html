@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Doca Check-in</title>
+<title>TodoGreen Disponibilidade</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -15,6 +15,9 @@
     --line:#374039;
     --brand:#14733c;
     --accent:#43c98a;
+    --c1:#14733c; --c1-light:#43c98a;
+    --c2:#1c6fa0; --c2-light:#5ec3e8;
+    --c3:#b5651d; --c3-light:#f2a955;
     --red:#e2503a;
     --text:#edf3ee;
     --text-dim:#93a39a;
@@ -107,6 +110,12 @@
   .bay-btn .t{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:5px;}
   .bay-btn.active{border-color:var(--accent);background:rgba(20,115,60,.22);}
   .bay-btn.active .n{color:var(--accent);}
+  .bay-btn[data-bay="1"].active{border-color:var(--c1-light);background:rgba(20,115,60,.22);}
+  .bay-btn[data-bay="1"].active .n{color:var(--c1-light);}
+  .bay-btn[data-bay="2"].active{border-color:var(--c2-light);background:rgba(28,111,160,.22);}
+  .bay-btn[data-bay="2"].active .n{color:var(--c2-light);}
+  .bay-btn[data-bay="3"].active{border-color:var(--c3-light);background:rgba(181,101,29,.22);}
+  .bay-btn[data-bay="3"].active .n{color:var(--c3-light);}
   .bay-btn.closed{opacity:.4;pointer-events:none;}
   .bay-btn.closed .t{color:var(--red);}
 
@@ -151,8 +160,7 @@
     <div class="brand">
       <img src="data:image/png;base64,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" alt="TodoGreen">
       <div class="brand-text">
-        <span class="eyebrow">GREEN TEAM · CARREG. 01 · 02 · 03</span>
-        <h1>TodoGreen Check-in</h1>
+        <h1>TodoGreen Disponibilidade</h1>
       </div>
     </div>
     <button class="nav-toggle hidden" id="navToggle">Relatórios →</button>
@@ -160,20 +168,6 @@
 
   <!-- ============ CHECK-IN VIEW ============ -->
   <main id="checkinView">
-
-    <div class="radar-wrap">
-      <div class="radar">
-        <div class="ring r1"></div>
-        <div class="ring r2"></div>
-        <div class="ring r3"></div>
-        <div class="pulse" id="pulseRing"></div>
-        <div class="radar-core">
-          <div class="num" id="distNum">--</div>
-          <div class="unit">METROS DA BASE</div>
-        </div>
-      </div>
-      <div class="status-line wait" id="statusLine">Obtendo localização…</div>
-    </div>
 
     <div>
       <label class="field-label" for="driverInput">Motorista</label>
@@ -188,13 +182,13 @@
     <div>
       <label class="field-label">Carregamento</label>
       <div class="bays">
-        <div class="bay-btn" data-bay="1"><span class="n">1</span><span class="l">Carreg.</span><span class="t">06h–12h</span></div>
-        <div class="bay-btn" data-bay="2"><span class="n">2</span><span class="l">Carreg.</span><span class="t">13h–18h</span></div>
-        <div class="bay-btn" data-bay="3"><span class="n">3</span><span class="l">Carreg.</span><span class="t">18h–20h</span></div>
+        <div class="bay-btn" data-bay="1"><span class="n">1</span><span class="l">Carreg.</span></div>
+        <div class="bay-btn" data-bay="2"><span class="n">2</span><span class="l">Carreg.</span></div>
+        <div class="bay-btn" data-bay="3"><span class="n">3</span><span class="l">Carreg.</span></div>
       </div>
     </div>
 
-    <button class="submit-btn" id="submitBtn" disabled>Registrar presença</button>
+    <button class="submit-btn" id="submitBtn" disabled>Registrar disponibilidade</button>
     <div class="toast" id="toast"></div>
   </main>
 
@@ -229,7 +223,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Data/Hora</th><th>Motorista</th><th>Placa</th><th>Veíc.</th><th>Carreg.</th><th>Dist.</th></tr>
+          <tr><th>Data/Hora</th><th>Motorista</th><th>Placa</th><th>Veíc.</th><th>Carreg.</th></tr>
         </thead>
         <tbody id="reportBody"></tbody>
       </table>
@@ -242,21 +236,9 @@
 </div>
 
 <script>
-/* =========================================================================
-   CONFIGURAÇÃO — troque aqui quando for usar o endereço real da base
-   ========================================================================= */
-const BASE_LAT = -23.599543;      // R. Quatá, 157 - Vila Olímpia, São Paulo - SP
-const BASE_LNG = -46.6752895;     // R. Quatá, 157 - Vila Olímpia, São Paulo - SP
-const RADIUS_M = 10;              // raio permitido em metros
+/* ========================================================================= */
 const SHEET_URL = "https://script.google.com/macros/s/AKfycby6auNo4xo-nZFqbN0xeL6ImSwXL_XYmXB8_9-G7TE-o32ku_jdep0I2stc49Lk5Ezzsw/exec";
 const ADMIN_KEY = "todogreen2026";  // <- troque por uma senha sua; use no link admin (?admin=SUACHAVE)
-
-// Janelas de horário permitidas para cada carregamento (24h)
-const LOAD_WINDOWS = {
-  "1": { startH: 6,  startM: 0, endH: 12, endM: 0 },
-  "2": { startH: 13, startM: 0, endH: 18, endM: 0 },
-  "3": { startH: 18, startM: 0, endH: 20, endM: 0 }
-};
 
 let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
 
@@ -264,8 +246,6 @@ let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
 
 let currentDriver = null;
 let currentBay = null;
-let currentDistance = null;
-let watchId = null;
 
 const $ = (id) => document.getElementById(id);
 const driverListEl = $('driverList');
@@ -320,55 +300,6 @@ async function loadDrivers(){
 }
 loadDrivers();
 
-// ---- haversine distance in meters ----
-function distanceMeters(lat1, lon1, lat2, lon2){
-  const R = 6371000;
-  const toRad = d => d * Math.PI/180;
-  const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-function updateRadarUI(dist){
-  currentDistance = dist;
-  const inside = dist <= RADIUS_M;
-  $('distNum').textContent = dist === null ? '--' : Math.round(dist);
-  const pulse = $('pulseRing');
-  pulse.classList.toggle('off', !inside);
-  const status = $('statusLine');
-  if(dist === null){
-    status.className = 'status-line wait';
-    status.textContent = 'Obtendo localização…';
-  } else if(inside){
-    status.className = 'status-line ok';
-    status.textContent = 'Dentro da área da base';
-  } else {
-    status.className = 'status-line bad';
-    status.textContent = `Fora da área · aproxime-se ${Math.round(dist - RADIUS_M)} m`;
-  }
-  refreshSubmitState();
-}
-
-function startWatchingLocation(){
-  if(!navigator.geolocation){
-    $('statusLine').className = 'status-line bad';
-    $('statusLine').textContent = 'Geolocalização não suportada neste navegador';
-    return;
-  }
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const d = distanceMeters(pos.coords.latitude, pos.coords.longitude, BASE_LAT, BASE_LNG);
-      updateRadarUI(d);
-    },
-    (err) => {
-      $('statusLine').className = 'status-line bad';
-      $('statusLine').textContent = 'Ative o GPS e permita acesso à localização';
-    },
-    { enableHighAccuracy:true, maximumAge:2000, timeout:15000 }
-  );
-}
-startWatchingLocation();
-
 // ---- driver selection ----
 $('driverInput').addEventListener('input', (e) => {
   const match = DRIVERS.find(d => d.name.toLowerCase() === e.target.value.trim().toLowerCase());
@@ -384,36 +315,9 @@ $('driverInput').addEventListener('input', (e) => {
   refreshSubmitState();
 });
 
-// ---- janela de horário por carregamento ----
-function isBayOpen(bay, now = new Date()){
-  const w = LOAD_WINDOWS[bay];
-  if(!w) return true;
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const startMin = w.startH * 60 + w.startM;
-  const endMin = w.endH * 60 + w.endM;
-  return nowMin >= startMin && nowMin < endMin;
-}
-
-function refreshBayAvailability(){
-  document.querySelectorAll('.bay-btn').forEach(btn => {
-    const bay = btn.dataset.bay;
-    const open = isBayOpen(bay);
-    btn.classList.toggle('closed', !open);
-    if(!open && currentBay === bay){
-      // o carregamento selecionado saiu da janela de horário: desmarca
-      btn.classList.remove('active');
-      currentBay = null;
-    }
-  });
-  refreshSubmitState();
-}
-refreshBayAvailability();
-setInterval(refreshBayAvailability, 30000);
-
 // ---- bay selection ----
 document.querySelectorAll('.bay-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if(btn.classList.contains('closed')) return;
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentBay = btn.dataset.bay;
@@ -422,21 +326,21 @@ document.querySelectorAll('.bay-btn').forEach(btn => {
 });
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay);
+  const ok = currentDriver && currentBay;
   $('submitBtn').disabled = !ok;
 }
 
-// ---- submit check-in ----
+// ---- submit disponibilidade ----
 $('submitBtn').addEventListener('click', async () => {
-  if(!currentDriver || !currentBay || currentDistance === null) return;
+  if(!currentDriver || !currentBay) return;
   $('submitBtn').disabled = true;
   const record = {
+    kind: "disponibilidade",
     driverName: currentDriver.name,
     plate: currentDriver.plate,
     vehicleType: currentDriver.type,
     carregamento: currentBay,
-    timestamp: new Date().toISOString(),
-    distance: Math.round(currentDistance)
+    timestamp: new Date().toISOString()
   };
   try{
     await fetch(SHEET_URL, {
@@ -445,7 +349,7 @@ $('submitBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(record)
     });
-    showToast('ok', `Presença registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
+    showToast('ok', `Disponibilidade registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
     // reset for next entry (keep driver filled if this is a personal locked link)
     if(!lockedDriverParam){
       $('driverInput').value = '';
@@ -481,15 +385,15 @@ $('navToggle').addEventListener('click', () => {
 });
 
 async function loadReport(){
-  $('reportBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">Carregando…</td></tr>';
+  $('reportBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">Carregando…</td></tr>';
   try{
-    const response = await fetch(SHEET_URL);
+    const response = await fetch(`${SHEET_URL}?sheet=Disponibilidade`);
     const records = await response.json();
     allRecords = records.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
     populateDriverFilter();
     renderReport();
   }catch(err){
-    $('reportBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px;">Erro ao carregar registros da planilha.</td></tr>';
+    $('reportBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--red);padding:16px;">Erro ao carregar registros da planilha.</td></tr>';
   }
 }
 
@@ -532,7 +436,7 @@ function renderReport(){
     const tr = document.createElement('tr');
     const dt = new Date(r.timestamp);
     const dtStr = dt.toLocaleString('pt-BR');
-    tr.innerHTML = `<td>${dtStr}</td><td>${r.driverName}</td><td>${r.plate||'—'}</td><td>${r.vehicleType||'—'}</td><td>${r.carregamento}</td><td>${r.distance} m</td>`;
+    tr.innerHTML = `<td>${dtStr}</td><td>${r.driverName}</td><td>${r.plate||'—'}</td><td>${r.vehicleType||'—'}</td><td>${r.carregamento}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -557,8 +461,7 @@ $('exportBtn').addEventListener('click', () => {
     'Motorista': r.driverName,
     'Placa': r.plate || '',
     'Veículo': r.vehicleType || '',
-    'Carregamento': r.carregamento,
-    'Distância (m)': r.distance
+    'Carregamento': r.carregamento
   }));
   try{
     const ws = XLSX.utils.json_to_sheet(rows);
