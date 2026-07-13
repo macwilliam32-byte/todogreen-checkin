@@ -169,6 +169,8 @@
   <!-- ============ CHECK-IN VIEW ============ -->
   <main id="checkinView">
 
+    <div class="status-line wait" id="windowStatus" style="align-self:center;">Disponível das 22h às 15h</div>
+
     <div>
       <label class="field-label" for="driverInput">Motorista</label>
       <input type="text" id="driverInput" list="driverList" placeholder="Digite ou busque o nome" autocomplete="off">
@@ -239,6 +241,9 @@
 /* ========================================================================= */
 const SHEET_URL = "https://script.google.com/macros/s/AKfycby6auNo4xo-nZFqbN0xeL6ImSwXL_XYmXB8_9-G7TE-o32ku_jdep0I2stc49Lk5Ezzsw/exec";
 const ADMIN_KEY = "todogreen2026";  // <- troque por uma senha sua; use no link admin (?admin=SUACHAVE)
+
+// Janela permitida para marcar disponibilidade (passa da meia-noite: 22h -> 15h do dia seguinte)
+const AVAILABILITY_WINDOW = { startH: 22, startM: 0, endH: 15, endM: 0 };
 
 let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
 
@@ -315,9 +320,42 @@ $('driverInput').addEventListener('input', (e) => {
   refreshSubmitState();
 });
 
+// ---- janela de horário para disponibilidade (22h -> 15h, cruza a meia-noite) ----
+function isWithinAvailabilityWindow(now = new Date()){
+  const w = AVAILABILITY_WINDOW;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const startMin = w.startH * 60 + w.startM;
+  const endMin = w.endH * 60 + w.endM;
+  // janela cruza a meia-noite (start > end): aberta se depois do início OU antes do fim
+  return nowMin >= startMin || nowMin < endMin;
+}
+
+function refreshWindowStatus(){
+  const open = isWithinAvailabilityWindow();
+  const el = $('windowStatus');
+  if(open){
+    el.className = 'status-line ok';
+    el.style.alignSelf = 'center';
+    el.textContent = 'Disponível para marcar (22h às 15h)';
+  } else {
+    el.className = 'status-line bad';
+    el.style.alignSelf = 'center';
+    el.textContent = 'Fora do horário — abre às 22h';
+  }
+  document.querySelectorAll('.bay-btn').forEach(btn => btn.classList.toggle('closed', !open));
+  if(!open){
+    document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
+    currentBay = null;
+  }
+  refreshSubmitState();
+}
+refreshWindowStatus();
+setInterval(refreshWindowStatus, 30000);
+
 // ---- bay selection ----
 document.querySelectorAll('.bay-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    if(btn.classList.contains('closed')) return;
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentBay = btn.dataset.bay;
@@ -326,7 +364,7 @@ document.querySelectorAll('.bay-btn').forEach(btn => {
 });
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay;
+  const ok = currentDriver && currentBay && isWithinAvailabilityWindow();
   $('submitBtn').disabled = !ok;
 }
 
