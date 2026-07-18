@@ -206,10 +206,8 @@
 
     <div>
       <label class="field-label">Carregamento</label>
-      <div class="bays">
-        <div class="bay-btn" data-bay="1"><span class="n">1</span><span class="l">Carreg.</span><span class="t">06h–12h</span></div>
-        <div class="bay-btn" data-bay="2"><span class="n">2</span><span class="l">Carreg.</span><span class="t">13h–18h</span></div>
-        <div class="bay-btn" data-bay="3"><span class="n">3</span><span class="l">Carreg.</span><span class="t">18h–20h</span></div>
+      <div class="bays" style="grid-template-columns:1fr;">
+        <div class="bay-btn" data-bay="Amazon"><span class="n">Amazon</span><span class="t">06h–19h</span></div>
       </div>
     </div>
 
@@ -219,9 +217,8 @@
 
   <!-- ============ REPORT VIEW ============ -->
   <main id="reportView" class="hidden">
-    <label class="field-label">Fila de carregamento — hoje</label>
-    <div class="queue-cols" id="queueCols"></div>
-    <div class="queue-legend">★ = já fez o Carreg. 1 hoje (prioridade no 2 e 3)</div>
+    <label class="field-label">Fila de chegada — hoje</label>
+    <div class="queue-cols" id="queueCols" style="grid-template-columns:1fr;max-width:260px;margin-left:auto;margin-right:auto;"></div>
 
     <div class="summary-row" id="summaryRow"></div>
 
@@ -234,25 +231,16 @@
         <label class="field-label">Até</label>
         <input type="date" id="filterTo">
       </div>
-      <div>
+      <div class="full">
         <label class="field-label">Motorista</label>
         <select id="filterDriver"><option value="">Todos</option></select>
-      </div>
-      <div>
-        <label class="field-label">Carregamento</label>
-        <select id="filterBay">
-          <option value="">Todos</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-        </select>
       </div>
     </div>
 
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Data/Hora</th><th>Motorista</th><th>Placa</th><th>Veíc.</th><th>Carreg.</th><th>Dist.</th></tr>
+          <tr><th>Data/Hora</th><th>Motorista</th><th>Placa</th><th>Veíc.</th><th>Dist.</th></tr>
         </thead>
         <tbody id="reportBody"></tbody>
       </table>
@@ -274,11 +262,9 @@ const RADIUS_M = 50;              // raio permitido em metros
 const SHEET_URL = "https://script.google.com/macros/s/AKfycby6auNo4xo-nZFqbN0xeL6ImSwXL_XYmXB8_9-G7TE-o32ku_jdep0I2stc49Lk5Ezzsw/exec";
 const ADMIN_KEY = "todogreen2026";  // <- troque por uma senha sua; use no link admin (?admin=SUACHAVE)
 
-// Janelas de horário permitidas para cada carregamento (24h)
+// Janela de horário permitida para o carregamento (24h)
 const LOAD_WINDOWS = {
-  "1": { startH: 6,  startM: 0, endH: 12, endM: 0 },
-  "2": { startH: 13, startM: 0, endH: 18, endM: 0 },
-  "3": { startH: 18, startM: 0, endH: 20, endM: 0 }
+  "Amazon": { startH: 6, startM: 0, endH: 19, endM: 0 }
 };
 
 let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
@@ -544,7 +530,7 @@ $('navToggle').addEventListener('click', () => {
 });
 
 async function loadReport(){
-  $('reportBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">Carregando…</td></tr>';
+  $('reportBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">Carregando…</td></tr>';
   try{
     const response = await fetch(SHEET_URL);
     const records = await response.json();
@@ -553,7 +539,7 @@ async function loadReport(){
     renderReport();
     renderQueue();
   }catch(err){
-    $('reportBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px;">Erro ao carregar registros da planilha.</td></tr>';
+    $('reportBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--red);padding:16px;">Erro ao carregar registros da planilha.</td></tr>';
   }
 }
 
@@ -574,13 +560,11 @@ function getFiltered(){
   const from = $('filterFrom').value;
   const to = $('filterTo').value;
   const driver = $('filterDriver').value;
-  const bay = $('filterBay').value;
   return allRecords.filter(r => {
     const day = r.timestamp.slice(0,10);
     if(from && day < from) return false;
     if(to && day > to) return false;
     if(driver && r.driverName !== driver) return false;
-    if(bay && r.carregamento !== bay) return false;
     return true;
   });
 }
@@ -592,50 +576,33 @@ function isToday(isoString){
 }
 
 function renderQueue(){
-  const todays = allRecords.filter(r => isToday(r.timestamp));
-  const byBay = { "1": [], "2": [], "3": [] };
-  todays.forEach(r => { if(byBay[r.carregamento]) byBay[r.carregamento].push(r); });
+  const todays = allRecords
+    .filter(r => isToday(r.timestamp))
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-  // quem já fez o carregamento 1 hoje tem prioridade no 2 e no 3
-  const didLoad1 = new Set(byBay["1"].map(r => r.driverName));
-
-  byBay["1"].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  ["2", "3"].forEach(bay => {
-    byBay[bay].sort((a, b) => {
-      const pa = didLoad1.has(a.driverName) ? 0 : 1;
-      const pb = didLoad1.has(b.driverName) ? 0 : 1;
-      if(pa !== pb) return pa - pb;
-      return new Date(a.timestamp) - new Date(b.timestamp);
-    });
-  });
-
-  const colColor = { "1": "var(--accent)", "2": "var(--c2-light)", "3": "var(--c3-light)" };
   const container = $('queueCols');
   container.innerHTML = "";
-  ["1", "2", "3"].forEach(bay => {
-    const col = document.createElement('div');
-    col.className = 'queue-col';
-    const title = document.createElement('h3');
-    title.textContent = `Carreg. ${bay}`;
-    title.style.color = colColor[bay];
-    col.appendChild(title);
+  const col = document.createElement('div');
+  col.className = 'queue-col';
+  const title = document.createElement('h3');
+  title.textContent = 'Amazon';
+  title.style.color = 'var(--accent)';
+  col.appendChild(title);
 
-    if(byBay[bay].length === 0){
-      const empty = document.createElement('div');
-      empty.className = 'queue-empty';
-      empty.textContent = 'Ninguém ainda';
-      col.appendChild(empty);
-    } else {
-      byBay[bay].forEach((r, idx) => {
-        const item = document.createElement('div');
-        item.className = 'queue-item';
-        const star = (bay !== "1" && didLoad1.has(r.driverName)) ? '<span class="queue-priority">★</span>' : '';
-        item.innerHTML = `<span class="queue-rank">${idx + 1}º</span><span class="queue-name">${r.driverName}</span>${star}`;
-        col.appendChild(item);
-      });
-    }
-    container.appendChild(col);
-  });
+  if(todays.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'queue-empty';
+    empty.textContent = 'Ninguém ainda';
+    col.appendChild(empty);
+  } else {
+    todays.forEach((r, idx) => {
+      const item = document.createElement('div');
+      item.className = 'queue-item';
+      item.innerHTML = `<span class="queue-rank">${idx + 1}º</span><span class="queue-name">${r.driverName}</span>`;
+      col.appendChild(item);
+    });
+  }
+  container.appendChild(col);
 }
 
 function renderReport(){
@@ -649,21 +616,16 @@ function renderReport(){
     const tr = document.createElement('tr');
     const dt = new Date(r.timestamp);
     const dtStr = dt.toLocaleString('pt-BR');
-    tr.innerHTML = `<td>${dtStr}</td><td>${r.driverName}</td><td>${r.plate||'—'}</td><td>${r.vehicleType||'—'}</td><td>${r.carregamento}</td><td>${r.distance} m</td>`;
+    tr.innerHTML = `<td>${dtStr}</td><td>${r.driverName}</td><td>${r.plate||'—'}</td><td>${r.vehicleType||'—'}</td><td>${r.distance} m</td>`;
     tbody.appendChild(tr);
   });
 
-  const counts = {1:0,2:0,3:0};
-  filtered.forEach(r => counts[r.carregamento] = (counts[r.carregamento]||0) + 1);
   $('summaryRow').innerHTML = `
-    <div class="summary-card"><div class="n">${filtered.length}</div><div class="l">Total</div></div>
-    <div class="summary-card"><div class="n">${counts[1]||0}</div><div class="l">Carreg. 1</div></div>
-    <div class="summary-card"><div class="n">${counts[2]||0}</div><div class="l">Carreg. 2</div></div>
-    <div class="summary-card"><div class="n">${counts[3]||0}</div><div class="l">Carreg. 3</div></div>
+    <div class="summary-card"><div class="n">${filtered.length}</div><div class="l">Total registrado</div></div>
   `;
 }
 
-['filterFrom','filterTo','filterDriver','filterBay'].forEach(id => {
+['filterFrom','filterTo','filterDriver'].forEach(id => {
   $(id).addEventListener('change', renderReport);
 });
 
@@ -674,7 +636,6 @@ $('exportBtn').addEventListener('click', () => {
     'Motorista': r.driverName,
     'Placa': r.plate || '',
     'Veículo': r.vehicleType || '',
-    'Carregamento': r.carregamento,
     'Distância (m)': r.distance
   }));
   try{
