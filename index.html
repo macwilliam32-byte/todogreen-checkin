@@ -120,6 +120,8 @@
   .bay-btn.closed .t{color:var(--red);}
   .bay-btn.done{opacity:.55;pointer-events:none;border-color:var(--accent);background:rgba(67,201,138,.08);}
   .bay-btn.done .l{color:var(--accent);}
+  .bay-btn.checking{opacity:.6;pointer-events:none;}
+  .bay-btn.checking .l{color:var(--text-dim);}
 
   .submit-btn{
     margin-top:4px;width:100%;padding:16px;border-radius:12px;border:none;
@@ -328,12 +330,16 @@ function isToday(isoString){
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
-let alreadyMarked = new Set(); // carregamentos já registrados pelo motorista hoje
+let alreadyMarked = new Set(); // carregamentos já registrados pelo motorista hoje (visão atual)
+let checkingAlready = false; // true enquanto verifica na planilha (evita corrida/duplo toque)
+const sessionMarked = {}; // memória local por nome, sobrevive mesmo trocando de motorista na mesma sessão
 
 async function loadAlreadyMarked(){
-  if(!currentDriver) { alreadyMarked = new Set(); return; }
+  if(!currentDriver) { alreadyMarked = new Set(); checkingAlready = false; refreshSubmitState(); return; }
+  checkingAlready = true;
+  refreshSubmitState();
   try{
-    const res = await fetch(`${SHEET_URL}?action=records&sheet=Disponibilidade`);
+    const res = await fetch(`${SHEET_URL}?action=records&sheet=Disponibilidade&_=${Date.now()}`, { cache: 'no-store' });
     const records = await res.json();
     alreadyMarked = new Set(
       records
@@ -343,6 +349,10 @@ async function loadAlreadyMarked(){
   }catch(err){
     alreadyMarked = new Set();
   }
+  // reforça com o que essa sessão já sabe que foi enviado (protege contra cache/atraso da planilha)
+  const known = sessionMarked[currentDriver.name];
+  if(known) known.forEach(bay => alreadyMarked.add(bay));
+  checkingAlready = false;
   applyAlreadyMarked();
 }
 
@@ -351,8 +361,11 @@ function applyAlreadyMarked(){
     const bay = btn.dataset.bay;
     const done = alreadyMarked.has(bay);
     btn.classList.toggle('done', done);
+    btn.classList.toggle('checking', checkingAlready);
     const label = btn.querySelector('.l');
-    if(label) label.textContent = done ? 'Registrado ✓' : 'Toque para confirmar';
+    if(label){
+      label.textContent = checkingAlready ? 'Verificando…' : (done ? 'Registrado ✓' : 'Toque para confirmar');
+    }
     if(done && currentBay === bay){
       btn.classList.remove('active');
       currentBay = null;
@@ -386,7 +399,7 @@ setInterval(refreshWindowStatus, 30000);
 // ---- bay selection ----
 document.querySelectorAll('.bay-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if(btn.classList.contains('closed') || btn.classList.contains('done')) return;
+    if(btn.classList.contains('closed') || btn.classList.contains('done') || checkingAlready) return;
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentBay = btn.dataset.bay;
@@ -395,7 +408,7 @@ document.querySelectorAll('.bay-btn').forEach(btn => {
 });
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && isWithinAvailabilityWindow() && !alreadyMarked.has(currentBay);
+  const ok = currentDriver && currentBay && isWithinAvailabilityWindow() && !alreadyMarked.has(currentBay) && !checkingAlready;
   $('submitBtn').disabled = !ok;
 }
 
@@ -420,12 +433,13 @@ $('submitBtn').addEventListener('click', async () => {
     });
     showToast('ok', `Disponibilidade registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
     alreadyMarked.add(currentBay);
+    sessionMarked[currentDriver.name] = sessionMarked[currentDriver.name] || new Set();
+    sessionMarked[currentDriver.name].add(currentBay);
     // reset for next entry (keep driver filled if this is a personal locked link)
     if(!lockedDriverParam){
       $('driverInput').value = '';
       $('driverCard').classList.remove('show');
       currentDriver = null;
-      alreadyMarked = new Set();
     }
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     currentBay = null;
