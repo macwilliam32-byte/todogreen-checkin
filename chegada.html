@@ -118,6 +118,9 @@
   .bay-btn[data-bay="3"].active .n{color:var(--c3-light);}
   .bay-btn.closed{opacity:.4;pointer-events:none;}
   .bay-btn.closed .t{color:var(--red);}
+  .bay-btn.done{opacity:.55;pointer-events:none;border-color:var(--accent);background:rgba(67,201,138,.08);}
+  .bay-btn.done .l{color:var(--accent);}
+  .bay-btn.done .t{color:var(--accent);}
 
   .submit-btn{
     margin-top:4px;width:100%;padding:16px;border-radius:12px;border:none;
@@ -301,6 +304,7 @@ function lockDriverUI(found, viaDevice){
   if(viaDevice){
     $('changeDriverLink').classList.remove('hidden');
   }
+  loadAlreadyMarkedToday();
 }
 
 function saveDeviceDriver(name){
@@ -432,6 +436,40 @@ $('driverInput').addEventListener('input', (e) => {
   refreshSubmitState();
 });
 
+// ---- trava: só 1 chegada por dia por motorista ----
+function isToday(isoString){
+  const d = new Date(isoString);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+let alreadyMarkedToday = false;
+
+async function loadAlreadyMarkedToday(){
+  if(!currentDriver){ alreadyMarkedToday = false; applyAlreadyMarkedToday(); return; }
+  try{
+    const res = await fetch(`${SHEET_URL}?action=records`);
+    const records = await res.json();
+    alreadyMarkedToday = records.some(r => r.driverName === currentDriver.name && isToday(r.timestamp));
+  }catch(err){
+    alreadyMarkedToday = false;
+  }
+  applyAlreadyMarkedToday();
+}
+
+function applyAlreadyMarkedToday(){
+  document.querySelectorAll('.bay-btn').forEach(btn => {
+    btn.classList.toggle('done', alreadyMarkedToday);
+    const label = btn.querySelector('.t');
+    if(label) label.textContent = alreadyMarkedToday ? 'Registrado ✓ hoje' : '06h–19h';
+    if(alreadyMarkedToday){
+      btn.classList.remove('active');
+      if(currentBay === btn.dataset.bay) currentBay = null;
+    }
+  });
+  refreshSubmitState();
+}
+
 // ---- janela de horário por carregamento ----
 function isBayOpen(bay, now = new Date()){
   const w = LOAD_WINDOWS[bay];
@@ -470,7 +508,7 @@ document.querySelectorAll('.bay-btn').forEach(btn => {
 });
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay);
+  const ok = currentDriver && currentBay && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay) && !alreadyMarkedToday;
   $('submitBtn').disabled = !ok;
 }
 
@@ -494,7 +532,20 @@ $('submitBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(record)
     });
-    showToast('ok', `Presença registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
+
+    // busca a posição de chegada de hoje (inclui o registro que acabou de entrar)
+    let rankMsg = '';
+    try{
+      const res = await fetch(`${SHEET_URL}?action=records`);
+      const records = await res.json();
+      const todays = records.filter(r => isToday(r.timestamp)).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const rank = todays.findIndex(r => r.driverName === currentDriver.name) + 1;
+      if(rank > 0) rankMsg = ` — você é o ${rank}º de hoje!`;
+    }catch(e){ /* segue sem o número, não é crítico */ }
+
+    showToast('ok', `Presença registrada${rankMsg}`);
+    alreadyMarkedToday = true;
+    applyAlreadyMarkedToday();
     // reset for next entry (keep driver filled if it's locked, either via link or via this device)
     if(!$('driverInput').readOnly){
       $('driverInput').value = '';
@@ -567,12 +618,6 @@ function getFiltered(){
     if(driver && r.driverName !== driver) return false;
     return true;
   });
-}
-
-function isToday(isoString){
-  const d = new Date(isoString);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
 function renderQueue(){
