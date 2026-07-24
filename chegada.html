@@ -444,19 +444,40 @@ function isToday(isoString){
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
+function todayKey(now = new Date()){
+  return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+}
+
+function getLocalMarkedFlag(driverName){
+  try{ return localStorage.getItem('todogreen_chegada_marked_' + driverName) === todayKey(); }
+  catch(e){ return false; }
+}
+
+function setLocalMarkedFlag(driverName){
+  try{ localStorage.setItem('todogreen_chegada_marked_' + driverName, todayKey()); }
+  catch(e){ /* ignore */ }
+}
+
 let alreadyMarkedToday = false;
 let checkingAlready = false; // true enquanto verifica na planilha (evita corrida/duplo toque)
 
 async function loadAlreadyMarkedToday(){
   if(!currentDriver){ alreadyMarkedToday = false; checkingAlready = false; applyAlreadyMarkedToday(); return; }
+
+  // caminho rápido: confia primeiro no que este aparelho já sabe, sem depender da rede
+  alreadyMarkedToday = getLocalMarkedFlag(currentDriver.name);
+  applyAlreadyMarkedToday();
+  if(alreadyMarkedToday) return; // já sabemos que sim, não precisa nem checar a planilha
+
   checkingAlready = true;
   applyAlreadyMarkedToday();
   try{
     const res = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
     const records = await res.json();
     alreadyMarkedToday = records.some(r => r.driverName === currentDriver.name && isToday(r.timestamp));
+    if(alreadyMarkedToday) setLocalMarkedFlag(currentDriver.name);
   }catch(err){
-    alreadyMarkedToday = false;
+    alreadyMarkedToday = getLocalMarkedFlag(currentDriver.name); // se a rede falhar, mantém o que já sabíamos
   }
   checkingAlready = false;
   applyAlreadyMarkedToday();
@@ -553,6 +574,7 @@ $('submitBtn').addEventListener('click', async () => {
 
     showToast('ok', `Presença registrada${rankMsg}`);
     alreadyMarkedToday = true;
+    setLocalMarkedFlag(currentDriver.name);
     applyAlreadyMarkedToday();
     // reset for next entry (keep driver filled if it's locked, either via link or via this device)
     if(!$('driverInput').readOnly){
