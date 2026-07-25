@@ -573,6 +573,16 @@ $('submitBtn').addEventListener('click', async () => {
     distance: Math.round(currentDistance)
   };
   try{
+    // conta quantos já chegaram hoje ANTES de mandar o nosso registro —
+    // assim a posição não depende de reler o que acabamos de escrever (evita corrida com a planilha)
+    let rank = null;
+    try{
+      const preRes = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
+      const preRecords = await preRes.json();
+      const priorCount = preRecords.filter(r => isToday(r.timestamp)).length;
+      rank = priorCount + 1;
+    }catch(e){ /* segue sem número, não é crítico */ }
+
     await fetch(SHEET_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -581,7 +591,10 @@ $('submitBtn').addEventListener('click', async () => {
     });
 
     showToast('ok', 'Presença registrada!');
-    await showRankBadge(currentDriver.name);
+    if(rank){
+      $('rankBadge').textContent = `Sua posição hoje: ${rank}º`;
+      $('rankBadge').classList.remove('hidden');
+    }
     alreadyMarkedToday = true;
     setLocalMarkedFlag(currentDriver.name);
     applyAlreadyMarkedToday();
