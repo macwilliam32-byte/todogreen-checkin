@@ -216,6 +216,7 @@
     </div>
 
     <button class="submit-btn" id="submitBtn" disabled>Registrar presença</button>
+    <div class="status-line ok hidden" id="rankBadge" style="align-self:center;margin-top:2px;"></div>
     <div class="toast" id="toast"></div>
   </main>
 
@@ -458,16 +459,32 @@ function setLocalMarkedFlag(driverName){
   catch(e){ /* ignore */ }
 }
 
+async function showRankBadge(driverName){
+  try{
+    const res = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
+    const records = await res.json();
+    const todays = records.filter(r => isToday(r.timestamp)).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const rank = todays.findIndex(r => r.driverName === driverName) + 1;
+    const el = $('rankBadge');
+    if(rank > 0){
+      el.textContent = `Sua posição hoje: ${rank}º`;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  }catch(e){ /* não é crítico, deixa o badge como estava */ }
+}
+
 let alreadyMarkedToday = false;
 let checkingAlready = false; // true enquanto verifica na planilha (evita corrida/duplo toque)
 
 async function loadAlreadyMarkedToday(){
-  if(!currentDriver){ alreadyMarkedToday = false; checkingAlready = false; applyAlreadyMarkedToday(); return; }
+  if(!currentDriver){ alreadyMarkedToday = false; checkingAlready = false; applyAlreadyMarkedToday(); $('rankBadge').classList.add('hidden'); return; }
 
   // caminho rápido: confia primeiro no que este aparelho já sabe, sem depender da rede
   alreadyMarkedToday = getLocalMarkedFlag(currentDriver.name);
   applyAlreadyMarkedToday();
-  if(alreadyMarkedToday) return; // já sabemos que sim, não precisa nem checar a planilha
+  if(alreadyMarkedToday){ showRankBadge(currentDriver.name); return; } // já sabemos que sim, não precisa nem checar a planilha
 
   checkingAlready = true;
   applyAlreadyMarkedToday();
@@ -475,9 +492,10 @@ async function loadAlreadyMarkedToday(){
     const res = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
     const records = await res.json();
     alreadyMarkedToday = records.some(r => r.driverName === currentDriver.name && isToday(r.timestamp));
-    if(alreadyMarkedToday) setLocalMarkedFlag(currentDriver.name);
+    if(alreadyMarkedToday){ setLocalMarkedFlag(currentDriver.name); showRankBadge(currentDriver.name); }
   }catch(err){
     alreadyMarkedToday = getLocalMarkedFlag(currentDriver.name); // se a rede falhar, mantém o que já sabíamos
+    if(alreadyMarkedToday) showRankBadge(currentDriver.name);
   }
   checkingAlready = false;
   applyAlreadyMarkedToday();
@@ -562,17 +580,8 @@ $('submitBtn').addEventListener('click', async () => {
       body: JSON.stringify(record)
     });
 
-    // busca a posição de chegada de hoje (inclui o registro que acabou de entrar)
-    let rankMsg = '';
-    try{
-      const res = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
-      const records = await res.json();
-      const todays = records.filter(r => isToday(r.timestamp)).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-      const rank = todays.findIndex(r => r.driverName === currentDriver.name) + 1;
-      if(rank > 0) rankMsg = ` — você é o ${rank}º de hoje!`;
-    }catch(e){ /* segue sem o número, não é crítico */ }
-
-    showToast('ok', `Presença registrada${rankMsg}`);
+    showToast('ok', 'Presença registrada!');
+    await showRankBadge(currentDriver.name);
     alreadyMarkedToday = true;
     setLocalMarkedFlag(currentDriver.name);
     applyAlreadyMarkedToday();
@@ -581,6 +590,7 @@ $('submitBtn').addEventListener('click', async () => {
       $('driverInput').value = '';
       $('driverCard').classList.remove('show');
       currentDriver = null;
+      $('rankBadge').classList.add('hidden');
     }
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     currentBay = null;
