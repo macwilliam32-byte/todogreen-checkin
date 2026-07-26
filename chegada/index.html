@@ -118,6 +118,10 @@
   .bay-btn[data-bay="3"].active .n{color:var(--c3-light);}
   .bay-btn.closed{opacity:.4;pointer-events:none;}
   .bay-btn.closed .t{color:var(--red);}
+  .bay-btn.done{opacity:.55;pointer-events:none;border-color:var(--accent);background:rgba(67,201,138,.08);}
+  .bay-btn.done .l{color:var(--accent);}
+  .bay-btn.done .t{color:var(--accent);}
+  .bay-btn.checking{opacity:.6;pointer-events:none;}
 
   .submit-btn{
     margin-top:4px;width:100%;padding:16px;border-radius:12px;border:none;
@@ -212,6 +216,7 @@
     </div>
 
     <button class="submit-btn" id="submitBtn" disabled>Registrar presença</button>
+    <div class="status-line ok hidden" id="rankBadge" style="align-self:center;margin-top:2px;"></div>
     <div class="toast" id="toast"></div>
   </main>
 
@@ -301,6 +306,7 @@ function lockDriverUI(found, viaDevice){
   if(viaDevice){
     $('changeDriverLink').classList.remove('hidden');
   }
+  loadAlreadyMarkedToday();
 }
 
 function saveDeviceDriver(name){
@@ -432,6 +438,85 @@ $('driverInput').addEventListener('input', (e) => {
   refreshSubmitState();
 });
 
+// ---- trava: só 1 chegada por dia por motorista ----
+function isToday(isoString){
+  const d = new Date(isoString);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+function todayKey(now = new Date()){
+  return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+}
+
+function getLocalMarkedFlag(driverName){
+  try{ return localStorage.getItem('todogreen_chegada_marked_' + driverName) === todayKey(); }
+  catch(e){ return false; }
+}
+
+function setLocalMarkedFlag(driverName){
+  try{ localStorage.setItem('todogreen_chegada_marked_' + driverName, todayKey()); }
+  catch(e){ /* ignore */ }
+}
+
+async function showRankBadge(driverName){
+  try{
+    const res = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
+    const records = await res.json();
+    const todays = records.filter(r => isToday(r.timestamp)).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const rank = todays.findIndex(r => r.driverName === driverName) + 1;
+    const el = $('rankBadge');
+    if(rank > 0){
+      el.textContent = `Sua posição hoje: ${rank}º`;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  }catch(e){ /* não é crítico, deixa o badge como estava */ }
+}
+
+let alreadyMarkedToday = false;
+let checkingAlready = false; // true enquanto verifica na planilha (evita corrida/duplo toque)
+
+async function loadAlreadyMarkedToday(){
+  if(!currentDriver){ alreadyMarkedToday = false; checkingAlready = false; applyAlreadyMarkedToday(); $('rankBadge').classList.add('hidden'); return; }
+
+  // caminho rápido: confia primeiro no que este aparelho já sabe, sem depender da rede
+  alreadyMarkedToday = getLocalMarkedFlag(currentDriver.name);
+  applyAlreadyMarkedToday();
+  if(alreadyMarkedToday){ showRankBadge(currentDriver.name); return; } // já sabemos que sim, não precisa nem checar a planilha
+
+  checkingAlready = true;
+  applyAlreadyMarkedToday();
+  try{
+    const res = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
+    const records = await res.json();
+    alreadyMarkedToday = records.some(r => r.driverName === currentDriver.name && isToday(r.timestamp));
+    if(alreadyMarkedToday){ setLocalMarkedFlag(currentDriver.name); showRankBadge(currentDriver.name); }
+  }catch(err){
+    alreadyMarkedToday = getLocalMarkedFlag(currentDriver.name); // se a rede falhar, mantém o que já sabíamos
+    if(alreadyMarkedToday) showRankBadge(currentDriver.name);
+  }
+  checkingAlready = false;
+  applyAlreadyMarkedToday();
+}
+
+function applyAlreadyMarkedToday(){
+  document.querySelectorAll('.bay-btn').forEach(btn => {
+    btn.classList.toggle('done', alreadyMarkedToday);
+    btn.classList.toggle('checking', checkingAlready);
+    const label = btn.querySelector('.t');
+    if(label){
+      label.textContent = checkingAlready ? 'Verificando…' : (alreadyMarkedToday ? 'Registrado ✓ hoje' : '06h–19h');
+    }
+    if(alreadyMarkedToday){
+      btn.classList.remove('active');
+      if(currentBay === btn.dataset.bay) currentBay = null;
+    }
+  });
+  refreshSubmitState();
+}
+
 // ---- janela de horário por carregamento ----
 function isBayOpen(bay, now = new Date()){
   const w = LOAD_WINDOWS[bay];
@@ -461,7 +546,7 @@ setInterval(refreshBayAvailability, 30000);
 // ---- bay selection ----
 document.querySelectorAll('.bay-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if(btn.classList.contains('closed')) return;
+    if(btn.classList.contains('closed') || btn.classList.contains('done') || checkingAlready) return;
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentBay = btn.dataset.bay;
@@ -470,7 +555,7 @@ document.querySelectorAll('.bay-btn').forEach(btn => {
 });
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay);
+  const ok = currentDriver && currentBay && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay) && !alreadyMarkedToday && !checkingAlready;
   $('submitBtn').disabled = !ok;
 }
 
@@ -488,18 +573,37 @@ $('submitBtn').addEventListener('click', async () => {
     distance: Math.round(currentDistance)
   };
   try{
+    // conta quantos já chegaram hoje ANTES de mandar o nosso registro —
+    // assim a posição não depende de reler o que acabamos de escrever (evita corrida com a planilha)
+    let rank = null;
+    try{
+      const preRes = await fetch(`${SHEET_URL}?action=records&_=${Date.now()}`, { cache: 'no-store' });
+      const preRecords = await preRes.json();
+      const priorCount = preRecords.filter(r => isToday(r.timestamp)).length;
+      rank = priorCount + 1;
+    }catch(e){ /* segue sem número, não é crítico */ }
+
     await fetch(SHEET_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(record)
     });
-    showToast('ok', `Presença registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
+
+    showToast('ok', 'Presença registrada!');
+    if(rank){
+      $('rankBadge').textContent = `Sua posição hoje: ${rank}º`;
+      $('rankBadge').classList.remove('hidden');
+    }
+    alreadyMarkedToday = true;
+    setLocalMarkedFlag(currentDriver.name);
+    applyAlreadyMarkedToday();
     // reset for next entry (keep driver filled if it's locked, either via link or via this device)
     if(!$('driverInput').readOnly){
       $('driverInput').value = '';
       $('driverCard').classList.remove('show');
       currentDriver = null;
+      $('rankBadge').classList.add('hidden');
     }
     document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
     currentBay = null;
@@ -567,12 +671,6 @@ function getFiltered(){
     if(driver && r.driverName !== driver) return false;
     return true;
   });
-}
-
-function isToday(isoString){
-  const d = new Date(isoString);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
 function renderQueue(){
