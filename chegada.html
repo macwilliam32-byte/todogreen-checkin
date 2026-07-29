@@ -208,12 +208,7 @@
       <a href="#" id="changeDriverLink" class="hidden" style="font-size:12px;color:var(--text-dim);text-decoration:underline;margin-top:8px;display:block;">Não é você? Trocar motorista deste aparelho</a>
     </div>
 
-    <div>
-      <label class="field-label">Carregamento</label>
-      <div class="bays" style="grid-template-columns:1fr;">
-        <div class="bay-btn" data-bay="Amazon"><span class="n">Amazon</span><span class="t">06h–19h</span></div>
-      </div>
-    </div>
+    <div class="status-line wait" id="loadStatus" style="align-self:center;">Horário de chegada: 6h às 19h</div>
 
     <button class="submit-btn" id="submitBtn" disabled>Registrar presença</button>
     <div class="status-line ok hidden" id="rankBadge" style="align-self:center;margin-top:2px;"></div>
@@ -277,7 +272,7 @@ let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
 /* ========================================================================= */
 
 let currentDriver = null;
-let currentBay = null;
+let currentBay = "Amazon"; // carregamento único, não precisa mais de seleção
 let currentDistance = null;
 let watchId = null;
 
@@ -502,22 +497,11 @@ async function loadAlreadyMarkedToday(){
 }
 
 function applyAlreadyMarkedToday(){
-  document.querySelectorAll('.bay-btn').forEach(btn => {
-    btn.classList.toggle('done', alreadyMarkedToday);
-    btn.classList.toggle('checking', checkingAlready);
-    const label = btn.querySelector('.t');
-    if(label){
-      label.textContent = checkingAlready ? 'Verificando…' : (alreadyMarkedToday ? 'Registrado ✓ hoje' : '06h–19h');
-    }
-    if(alreadyMarkedToday){
-      btn.classList.remove('active');
-      if(currentBay === btn.dataset.bay) currentBay = null;
-    }
-  });
+  refreshLoadStatus();
   refreshSubmitState();
 }
 
-// ---- janela de horário por carregamento ----
+// ---- janela de horário do carregamento (Amazon) ----
 function isBayOpen(bay, now = new Date()){
   const w = LOAD_WINDOWS[bay];
   if(!w) return true;
@@ -527,36 +511,30 @@ function isBayOpen(bay, now = new Date()){
   return nowMin >= startMin && nowMin < endMin;
 }
 
-function refreshBayAvailability(){
-  document.querySelectorAll('.bay-btn').forEach(btn => {
-    const bay = btn.dataset.bay;
-    const open = isBayOpen(bay);
-    btn.classList.toggle('closed', !open);
-    if(!open && currentBay === bay){
-      // o carregamento selecionado saiu da janela de horário: desmarca
-      btn.classList.remove('active');
-      currentBay = null;
-    }
-  });
-  refreshSubmitState();
+function refreshLoadStatus(){
+  const el = $('loadStatus');
+  const open = isBayOpen(currentBay);
+  if(checkingAlready){
+    el.className = 'status-line wait';
+    el.textContent = 'Verificando…';
+  } else if(alreadyMarkedToday){
+    el.className = 'status-line ok';
+    el.textContent = 'Registrado ✓ hoje';
+  } else if(!open){
+    el.className = 'status-line bad';
+    el.textContent = 'Fora do horário (6h às 19h)';
+  } else {
+    el.className = 'status-line wait';
+    el.textContent = 'Horário de chegada: 6h às 19h';
+  }
 }
-refreshBayAvailability();
-setInterval(refreshBayAvailability, 30000);
-
-// ---- bay selection ----
-document.querySelectorAll('.bay-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if(btn.classList.contains('closed') || btn.classList.contains('done') || checkingAlready) return;
-    document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentBay = btn.dataset.bay;
-    refreshSubmitState();
-  });
-});
+refreshLoadStatus();
+setInterval(() => { refreshLoadStatus(); refreshSubmitState(); }, 30000);
 
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay) && !alreadyMarkedToday && !checkingAlready;
+  const ok = currentDriver && currentDistance !== null && currentDistance <= RADIUS_M && isBayOpen(currentBay) && !alreadyMarkedToday && !checkingAlready;
   $('submitBtn').disabled = !ok;
+  $('submitBtn').textContent = alreadyMarkedToday ? 'Já registrado hoje ✓' : 'Registrar presença';
 }
 
 // ---- submit check-in ----
@@ -605,8 +583,6 @@ $('submitBtn').addEventListener('click', async () => {
       currentDriver = null;
       $('rankBadge').classList.add('hidden');
     }
-    document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
-    currentBay = null;
   }catch(err){
     showToast('bad', 'Não foi possível salvar. Verifique a internet e tente novamente.');
   }
