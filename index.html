@@ -185,13 +185,6 @@
       </div>
     </div>
 
-    <div>
-      <label class="field-label">Carregamento</label>
-      <div class="bays" style="grid-template-columns:1fr;">
-        <div class="bay-btn" data-bay="Amazon"><span class="n">Amazon</span><span class="l">Toque para confirmar</span></div>
-      </div>
-    </div>
-
     <button class="submit-btn" id="submitBtn" disabled>Registrar disponibilidade</button>
     <div class="toast" id="toast"></div>
   </main>
@@ -243,7 +236,7 @@ let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
 /* ========================================================================= */
 
 let currentDriver = null;
-let currentBay = null;
+let currentBay = "Amazon"; // carregamento único, não precisa mais de seleção
 
 const $ = (id) => document.getElementById(id);
 const driverListEl = $('driverList');
@@ -357,59 +350,37 @@ async function loadAlreadyMarked(){
 }
 
 function applyAlreadyMarked(){
-  document.querySelectorAll('.bay-btn').forEach(btn => {
-    const bay = btn.dataset.bay;
-    const done = alreadyMarked.has(bay);
-    btn.classList.toggle('done', done);
-    btn.classList.toggle('checking', checkingAlready);
-    const label = btn.querySelector('.l');
-    if(label){
-      label.textContent = checkingAlready ? 'Verificando…' : (done ? 'Registrado ✓' : 'Toque para confirmar');
-    }
-    if(done && currentBay === bay){
-      btn.classList.remove('active');
-      currentBay = null;
-    }
-  });
+  refreshWindowStatus();
   refreshSubmitState();
 }
 
 function refreshWindowStatus(){
   const open = isWithinAvailabilityWindow();
+  const done = alreadyMarked.has(currentBay);
   const el = $('windowStatus');
-  if(open){
+  el.style.alignSelf = 'center';
+  if(checkingAlready){
+    el.className = 'status-line wait';
+    el.textContent = 'Verificando…';
+  } else if(done){
     el.className = 'status-line ok';
-    el.style.alignSelf = 'center';
+    el.textContent = 'Registrado ✓ hoje';
+  } else if(open){
+    el.className = 'status-line ok';
     el.textContent = 'Disponível para marcar (6h às 16h)';
   } else {
     el.className = 'status-line bad';
-    el.style.alignSelf = 'center';
     el.textContent = 'Fora do horário — abre às 6h';
-  }
-  document.querySelectorAll('.bay-btn').forEach(btn => btn.classList.toggle('closed', !open));
-  if(!open){
-    document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
-    currentBay = null;
   }
   refreshSubmitState();
 }
 refreshWindowStatus();
 setInterval(refreshWindowStatus, 30000);
 
-// ---- bay selection ----
-document.querySelectorAll('.bay-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if(btn.classList.contains('closed') || btn.classList.contains('done') || checkingAlready) return;
-    document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentBay = btn.dataset.bay;
-    refreshSubmitState();
-  });
-});
-
 function refreshSubmitState(){
-  const ok = currentDriver && currentBay && isWithinAvailabilityWindow() && !alreadyMarked.has(currentBay) && !checkingAlready;
+  const ok = currentDriver && isWithinAvailabilityWindow() && !alreadyMarked.has(currentBay) && !checkingAlready;
   $('submitBtn').disabled = !ok;
+  $('submitBtn').textContent = alreadyMarked.has(currentBay) ? 'Já registrado hoje ✓' : 'Registrar disponibilidade';
 }
 
 // ---- submit disponibilidade ----
@@ -431,7 +402,7 @@ $('submitBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(record)
     });
-    showToast('ok', `Disponibilidade registrada — ${currentDriver.name} · Carreg. ${currentBay}`);
+    showToast('ok', `Disponibilidade registrada — ${currentDriver.name}`);
     alreadyMarked.add(currentBay);
     sessionMarked[currentDriver.name] = sessionMarked[currentDriver.name] || new Set();
     sessionMarked[currentDriver.name].add(currentBay);
@@ -441,8 +412,6 @@ $('submitBtn').addEventListener('click', async () => {
       $('driverCard').classList.remove('show');
       currentDriver = null;
     }
-    document.querySelectorAll('.bay-btn').forEach(b => b.classList.remove('active'));
-    currentBay = null;
     applyAlreadyMarked();
   }catch(err){
     showToast('bad', 'Não foi possível salvar. Verifique a internet e tente novamente.');
