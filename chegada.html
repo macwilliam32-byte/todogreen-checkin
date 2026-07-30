@@ -208,7 +208,7 @@
       <a href="#" id="changeDriverLink" class="hidden" style="font-size:12px;color:var(--text-dim);text-decoration:underline;margin-top:8px;display:block;">Não é você? Trocar motorista deste aparelho</a>
     </div>
 
-    <div class="status-line wait" id="loadStatus" style="align-self:center;">Horário de chegada: 6h às 19h</div>
+    <div class="status-line wait" id="loadStatus" style="align-self:center;">Horário de chegada: 6h às 21h</div>
 
     <button class="submit-btn" id="submitBtn" disabled>Registrar presença</button>
     <div class="status-line ok hidden" id="rankBadge" style="align-self:center;margin-top:2px;"></div>
@@ -264,7 +264,7 @@ const ADMIN_KEY = "todogreen2026";  // <- troque por uma senha sua; use no link 
 
 // Janela de horário permitida para o carregamento (24h)
 const LOAD_WINDOWS = {
-  "Amazon": { startH: 6, startM: 0, endH: 19, endM: 0 }
+  "Amazon": { startH: 6, startM: 0, endH: 21, endM: 0 }
 };
 
 let DRIVERS = []; // carregado dinamicamente da aba "Motoristas" da planilha
@@ -522,10 +522,10 @@ function refreshLoadStatus(){
     el.textContent = 'Registrado ✓ hoje';
   } else if(!open){
     el.className = 'status-line bad';
-    el.textContent = 'Fora do horário (6h às 19h)';
+    el.textContent = 'Fora do horário (6h às 21h)';
   } else {
     el.className = 'status-line wait';
-    el.textContent = 'Horário de chegada: 6h às 19h';
+    el.textContent = 'Horário de chegada: 6h às 21h';
   }
 }
 refreshLoadStatus();
