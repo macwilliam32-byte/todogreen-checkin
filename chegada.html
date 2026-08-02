@@ -541,6 +541,13 @@ function refreshSubmitState(){
 $('submitBtn').addEventListener('click', async () => {
   if(!currentDriver || !currentBay || currentDistance === null) return;
   $('submitBtn').disabled = true;
+
+  // trava local IMEDIATAMENTE, antes de qualquer chamada de rede — protege contra
+  // recarregar a página ou tocar de novo bem no meio do envio (só desfaz se o envio falhar de verdade)
+  alreadyMarkedToday = true;
+  setLocalMarkedFlag(currentDriver.name);
+  applyAlreadyMarkedToday();
+
   const record = {
     kind: "chegada",
     driverName: currentDriver.name,
@@ -573,9 +580,6 @@ $('submitBtn').addEventListener('click', async () => {
       $('rankBadge').textContent = `Sua posição hoje: ${rank}º`;
       $('rankBadge').classList.remove('hidden');
     }
-    alreadyMarkedToday = true;
-    setLocalMarkedFlag(currentDriver.name);
-    applyAlreadyMarkedToday();
     // reset for next entry (keep driver filled if it's locked, either via link or via this device)
     if(!$('driverInput').readOnly){
       $('driverInput').value = '';
@@ -584,6 +588,10 @@ $('submitBtn').addEventListener('click', async () => {
       $('rankBadge').classList.add('hidden');
     }
   }catch(err){
+    // envio falhou de verdade: desfaz a trava local pra permitir tentar de novo
+    alreadyMarkedToday = false;
+    try{ localStorage.removeItem('todogreen_chegada_marked_' + record.driverName); }catch(e){}
+    applyAlreadyMarkedToday();
     showToast('bad', 'Não foi possível salvar. Verifique a internet e tente novamente.');
   }
   refreshSubmitState();
